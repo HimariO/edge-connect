@@ -26,7 +26,10 @@ class BaseModel(nn.Module):
             else:
                 data = torch.load(self.gen_weights_path, map_location=lambda storage, loc: storage)
 
-            self.generator.load_state_dict(data['generator'])
+            if type(self.generator) is nn.DataParallel:
+                self.generator.module.load_state_dict(data['generator'])
+            else:
+                self.generator.load_state_dict(data['generator'])
             self.iteration = data['iteration']
 
         # load discriminator only when training
@@ -38,17 +41,24 @@ class BaseModel(nn.Module):
             else:
                 data = torch.load(self.dis_weights_path, map_location=lambda storage, loc: storage)
 
-            self.discriminator.load_state_dict(data['discriminator'])
+            if type(self.generator) is nn.DataParallel:
+                self.discriminator.module.load_state_dict(data['discriminator'])
+            else:
+                self.discriminator.load_state_dict(data['discriminator'])
 
     def save(self):
         print('\nsaving %s...\n' % self.name)
         torch.save({
             'iteration': self.iteration,
-            'generator': self.generator.state_dict()
+            'generator': (self.generator.module.state_dict()
+                          if type(self.generator) is nn.DataParallel
+                          else self.generator.state_dict())
         }, self.gen_weights_path)
 
         torch.save({
-            'discriminator': self.discriminator.state_dict()
+            'discriminator': (self.discriminator.module.state_dict()
+                              if type(self.discriminator) is nn.DataParallel
+                              else self.discriminator.state_dict())
         }, self.dis_weights_path)
 
 
@@ -160,7 +170,7 @@ class InpaintingModel(BaseModel):
         discriminator = Discriminator(in_channels=3, use_sigmoid=config.GAN_LOSS != 'hinge')
         if len(config.GPU) > 1:
             generator = nn.DataParallel(generator, config.GPU)
-            discriminator = nn.DataParallel(discriminator , config.GPU)
+            discriminator = nn.DataParallel(discriminator, config.GPU)
 
         l1_loss = nn.L1Loss()
         perceptual_loss = PerceptualLoss()
